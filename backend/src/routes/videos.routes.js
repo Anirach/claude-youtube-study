@@ -4,6 +4,7 @@ const youtubeService = require('../services/youtube.service');
 const transcriptionService = require('../services/transcription.service');
 const llmService = require('../services/llm.service');
 const ragService = require('../services/rag.service');
+const autoCategorizationService = require('../services/auto-categorization.service');
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -279,6 +280,142 @@ router.post('/batch', async (req, res) => {
     });
   } catch (error) {
     console.error('Error batch importing:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/videos/:id/auto-categorize - Auto-categorize a video
+ */
+router.post('/:id/auto-categorize', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const video = await prisma.video.findUnique({
+      where: { id },
+      include: { category: true }
+    });
+
+    if (!video) {
+      return res.status(404).json({ error: 'Video not found' });
+    }
+
+    const categories = await prisma.category.findMany();
+
+    const suggestion = await autoCategorizationService.suggestCategoryAndTags(
+      {
+        title: video.title,
+        description: video.author,
+        transcription: video.transcription
+      },
+      categories
+    );
+
+    res.json(suggestion);
+  } catch (error) {
+    console.error('Error auto-categorizing video:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /api/videos/bulk/categorize - Bulk categorize videos
+ */
+router.post('/bulk/categorize', async (req, res) => {
+  try {
+    const { videoIds } = req.body;
+
+    if (!videoIds || !Array.isArray(videoIds)) {
+      return res.status(400).json({ error: 'Video IDs array is required' });
+    }
+
+    const videos = await prisma.video.findMany({
+      where: { id: { in: videoIds } },
+      include: { category: true }
+    });
+
+    const categories = await prisma.category.findMany();
+
+    const suggestions = await autoCategorizationService.batchCategorize(videos, categories);
+
+    res.json({ suggestions });
+  } catch (error) {
+    console.error('Error bulk categorizing:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * PUT /api/videos/bulk/update - Bulk update videos
+ */
+router.put('/bulk/update', async (req, res) => {
+  try {
+    const { videoIds, updates } = req.body;
+
+    if (!videoIds || !Array.isArray(videoIds)) {
+      return res.status(400).json({ error: 'Video IDs array is required' });
+    }
+
+    const updateData = {};
+    if (updates.categoryId !== undefined) {
+      updateData.categoryId = updates.categoryId;
+    }
+    if (updates.watchStatus !== undefined) {
+      updateData.watchStatus = updates.watchStatus;
+    }
+    if (updates.tags !== undefined) {
+      updateData.tags = JSON.stringify(updates.tags);
+    }
+
+    await prisma.video.updateMany({
+      where: { id: { in: videoIds } },
+      data: updateData
+    });
+
+    const updatedVideos = await prisma.video.findMany({
+      where: { id: { in: videoIds } },
+      include: { category: true }
+    });
+
+    res.json({
+      updated: updatedVideos.map(v => ({
+        ...v,
+        tags: JSON.parse(v.tags || '[]')
+      }))
+    });
+  } catch (error) {
+    console.error('Error bulk updating videos:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * DELETE /api/videos/bulk/delete - Bulk delete videos
+ */
+router.delete('/bulk/delete', async (req, res) => {
+  try {
+    const { videoIds } = req.body;
+
+    if (!videoIds || !Array.isArray(videoIds)) {
+      return res.status(400).json({ error: 'Video IDs array is required' });
+    }
+
+    // Delete knowledge graph entries
+    await prisma.knowledgeGraph.deleteMany({
+      where: { videoId: { in: videoIds } }
+    });
+
+    // Delete videos
+    const result = await prisma.video.deleteMany({
+      where: { id: { in: videoIds } }
+    });
+
+    res.json({
+      message: 'Videos deleted successfully',
+      count: result.count
+    });
+  } catch (error) {
+    console.error('Error bulk deleting videos:', error);
     res.status(500).json({ error: error.message });
   }
 });

@@ -169,4 +169,84 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/categories/tree - Get hierarchical category tree
+ */
+router.get('/tree/structure', async (req, res) => {
+  try {
+    const categories = await prisma.category.findMany({
+      include: {
+        videos: {
+          select: { id: true }
+        }
+      },
+      orderBy: { name: 'asc' }
+    });
+
+    // Build hierarchical structure
+    const categoryMap = new Map();
+    const rootCategories = [];
+
+    // First pass: create map
+    categories.forEach(cat => {
+      categoryMap.set(cat.id, {
+        ...cat,
+        videoCount: cat.videos.length,
+        videos: undefined,
+        children: []
+      });
+    });
+
+    // Second pass: build tree
+    categories.forEach(cat => {
+      const categoryNode = categoryMap.get(cat.id);
+      if (cat.parentId) {
+        const parent = categoryMap.get(cat.parentId);
+        if (parent) {
+          parent.children.push(categoryNode);
+        } else {
+          rootCategories.push(categoryNode);
+        }
+      } else {
+        rootCategories.push(categoryNode);
+      }
+    });
+
+    res.json(rootCategories);
+  } catch (error) {
+    console.error('Error fetching category tree:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /api/categories/:id/subcategories - Get subcategories
+ */
+router.get('/:id/subcategories', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const subcategories = await prisma.category.findMany({
+      where: { parentId: id },
+      include: {
+        videos: {
+          select: { id: true }
+        }
+      },
+      orderBy: { name: 'asc' }
+    });
+
+    res.json(
+      subcategories.map(cat => ({
+        ...cat,
+        videoCount: cat.videos.length,
+        videos: undefined
+      }))
+    );
+  } catch (error) {
+    console.error('Error fetching subcategories:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 module.exports = router;
