@@ -9,38 +9,34 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 4000;
 
-// Middleware
+// Import middleware
+const { performanceMonitor } = require('./middleware/performance.middleware');
+const { errorHandler } = require('./middleware/error-handler.middleware');
+
+// Basic middleware
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Performance monitoring
+app.use(performanceMonitor);
 
 // Import routes
 const videosRoutes = require('./routes/videos.routes');
 const categoriesRoutes = require('./routes/categories.routes');
 const graphRoutes = require('./routes/graph.routes');
 const chatRoutes = require('./routes/chat.routes');
+const monitoringRoutes = require('./routes/monitoring.routes');
 
 // API Routes
 app.use('/api/videos', videosRoutes);
 app.use('/api/categories', categoriesRoutes);
 app.use('/api/graph', graphRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/monitoring', monitoringRoutes);
 
-// Health check endpoint
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', message: 'YouTube Study App API is running' });
-});
-
-// Error handling middleware
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(err.status || 500).json({
-    error: {
-      message: err.message || 'Internal Server Error',
-      status: err.status || 500
-    }
-  });
-});
+// Error handling middleware (must be last)
+app.use(errorHandler);
 
 // Start server
 app.listen(PORT, () => {
