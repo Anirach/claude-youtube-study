@@ -1,0 +1,55 @@
+// Prisma schema for YouTube Study App
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Video {
+  id              String    @id @default(uuid())
+  youtubeId       String    @unique
+  url             String
+  title           String
+  author          String?
+  duration        Int?
+  uploadDate      DateTime?
+  categoryId      String?
+  category        Category? @relation(fields: [categoryId], references: [id])
+  tags            String    // JSON stringified array
+  watchStatus     String    @default("unwatched")
+  transcription   String?
+  summaryJson     String?   // JSON stringified summary object
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model Category {
+  id          String   @id @default(uuid())
+  name        String
+  parentId    String?
+  color       String?
+  icon        String?
+  videoCount  Int      @default(0)
+  videos      Video[]
+  createdAt   DateTime @default(now())
+}
+
+model KnowledgeGraph {
+  id            String @id @default(uuid())
+  videoId       String @unique
+  embeddings    String // JSON stringified embeddings
+  relationships String // JSON stringified relationships
+  ragIndexRef   String?
+}
+
+model ChatSession {
+  id             String   @id @default(uuid())
+  videoIds       String   // JSON stringified array
+  messages       String   // JSON stringified messages
+  contextSummary String?
+  createdAt      DateTime @default(now())
+}

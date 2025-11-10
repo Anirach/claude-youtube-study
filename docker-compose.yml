@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+      - "4000:4000"
+    environment:
+      # Database
+      - DATABASE_URL=file:/app/data/app.db
+
+      # LLM Configuration
+      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - LOCAL_LLM_URL=${LOCAL_LLM_URL:-http://localhost:11434}
+      - LOCAL_LLM_MODEL=${LOCAL_LLM_MODEL:-llama2}
+
+      # Backend Configuration
+      - PORT=4000
+
+      # Frontend Configuration
+      - NEXT_PUBLIC_BACKEND_URL=http://localhost:4000
+
+    volumes:
+      # Persist database
+      - ./data:/app/data
+
+    restart: unless-stopped
+
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:4000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  app-data:
